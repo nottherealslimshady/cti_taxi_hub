@@ -1,0 +1,71 @@
+# docker-compose.yml
+# This file defines the services for your OpenTAXII server and its PostgreSQL database.
+# It also includes a service for your Python CTI collector/publisher application.
+
+version: '3.8'
+
+services:
+  # PostgreSQL database service for OpenTAXII
+  db:
+    image: postgres:13-alpine # Using a lightweight PostgreSQL image
+    container_name: opentaxii_db
+    environment:
+      POSTGRES_DB: opentaxii_db # Database name
+      POSTGRES_USER: opentaxii_user # Database user
+      POSTGRES_PASSWORD: TamvOrv_7S8ymkzLtXi3fx7nyPcmYZgvZWa2acmVETS_3MscorIM6umYjnqsDr4j50e4TrOm3EX6WpOtFWDIAQ # IMPORTANT: Change this to a strong password
+    volumes:
+      - opentaxii_data:/var/lib/postgresql/data # Persistent volume for database data
+    ports:
+      - "5432:5432" # Expose PostgreSQL port (optional, mainly for debugging)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opentaxii_user -d opentaxii_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # OpenTAXII server service
+  opentaxii:
+    image: eclecticiq/opentaxii:latest # Official OpenTAXII Docker image
+    container_name: opentaxii_server
+    environment:
+      # OpenTAXII configuration environment variables
+      OPENTAXII_AUTH_SECRET: sJO25lenarT4cnGd064Ht6zj1d-mpv9qnm6T3qXg-G20QiqSsq6whlsz2tQ74iMCdscu-j3tlufZlchpxau6OQ # IMPORTANT: Change this to a strong secret
+      OPENTAXII_DOMAIN: 0.0.0.0:9000 # Listen on all interfaces, port 9000
+      OPENTAXII_ADMIN_USER: admin # OpenTAXII admin username
+      OPENTAXII_ADMIN_PASS: YvhzY3gGHHbpfNvXa0c-RpuqYnRxLRFm11QAwDOEQ-Y3b_MGLGLVWwsmpC7LKfEG6hOwFOcL9P4ZfutiwM7ZiA # IMPORTANT: Change this to a strong password
+      # Database connection for OpenTAXII - MUST MATCH db service's POSTGRES_PASSWORD
+      OPENTAXII_DB_CONNECTION: postgresql://opentaxii_user:TamvOrv_7S8ymkzLtXi3fx7nyPcmYZgvZWa2acmVETS_3MscorIM6umYjnqsDr4j50e4TrOm3EX6WpOtFWDIAQ@db:5432/opentaxii_db
+      # Initial data configuration (optional, can be done via API later)
+      # You can mount a data-configuration.yml file here if you want to pre-configure collections
+      # For simplicity, we'll assume default collections or create them via API if needed.
+    ports:
+      - "9000:9000" # Expose OpenTAXII HTTP port
+    depends_on:
+      db:
+        condition: service_healthy # Ensure DB is healthy before starting OpenTAXII
+    restart: always
+
+  # Python CTI Collector/Publisher service
+  cti_collector:
+    build: . # Build from the current directory (where Dockerfile and Python scripts are)
+    container_name: cti_collector
+    environment:
+      # Pass OpenTAXII server details to the Python app
+      OPENTAXII_SERVER_URL: http://opentaxii_server:9000 # Use service name for internal Docker network
+      OPENTAXII_COLLECTION_ID: default_collection # Default collection ID in OpenTAXII
+      OPENTAXII_USERNAME: admin # OpenTAXII username for publishing
+      OPENTAXII_PASSWORD: your_opentaxii_admin_password # OpenTAXII password for publishing
+      # API Keys for CTI feeds (IMPORTANT: Replace with your actual keys)
+      VIRUSTOTAL_API_KEY: 513bf61cf011c015a0a5124ae7aa140412381e6b2115907fcfc500547e573fa2
+      ALIENVAULT_OTX_API_KEY: cc10d2976dbe84523c003c2b0b3bdb9ba375683d1b3469aec36438aa2c98acec
+      ABUSEIPDB_API_KEY: 5489b1d7dd9346cae4ffc0eb4c64a43dba74678d2a667ea2181c088fa489da5d891a8e81a1ec1222 # New: AbuseIPDB API key
+    depends_on:
+      opentaxii:
+        condition: service_started # Ensure OpenTAXII is started before collector
+    restart: on-failure # Restart if the script exits with an error
+    # Command to run your Python script
+    command: python3 /app/main.py
+
+volumes:
+  opentaxii_data: # Define the named volume for PostgreSQL data

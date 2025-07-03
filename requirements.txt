@@ -1,0 +1,5 @@
+# requirements.txt
+# Python dependencies for the CTI Collector/Publisher
+
+requests==2.32.3
+stix2==3.0.0
