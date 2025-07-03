@@ -1,5 +1,3 @@
-# cti_taxi_hub
-
 Cloud-Based Open Source CTI TAXII Hub
 This project demonstrates the creation of a robust, cloud-based open-source Cyber Threat Intelligence (CTI) pipeline. It leverages Docker and AWS to deploy a self-hosted TAXII 1.x server (OpenTAXII) and a Python application that collects CTI from various public sources, transforms it into the standardized STIX 2.x format, and publishes it to the OpenTAXII server.
 
@@ -18,6 +16,8 @@ VirusTotal: Fetches indicators (IPs, domains, URLs, file hashes) and converts th
 
 AlienVault OTX: Fetches "pulses" and extracts indicators, converting them to STIX.
 
+AbuseIPDB: Checks IP reputation for a given list of IPs and converts relevant data to STIX.
+
 (Optional: Spamhaus - requires API key, not fully implemented in default code due to common licensing restrictions on free tiers)
 
 STIX 2.x Standardization: All collected intelligence is transformed into STIX 2.x format, a widely accepted standard for cyber threat information.
@@ -32,6 +32,7 @@ Project Structure
 ├── config.py                   # Configuration for API keys and OpenTAXII
 ├── vt_fetcher.py               # Fetches data from VirusTotal
 ├── otx_fetcher.py              # Fetches data from AlienVault OTX
+├── abuseipdb_fetcher.py        # NEW: Fetches data from AbuseIPDB
 ├── taxii_publisher.py          # Converts to STIX and publishes to OpenTAXII
 └── main.py                     # Orchestrates the fetching and publishing process
 
@@ -48,6 +49,8 @@ VirusTotal: A free API key (available after registration on VirusTotal).
 
 AlienVault OTX: A free API key (available after registration on AlienVault OTX).
 
+AbuseIPDB: A free API key (available after registration on AbuseIPDB.com).
+
 (Optional) Spamhaus: If you have access to a Spamhaus API, you can extend the project.
 
 Setup and Deployment
@@ -60,7 +63,7 @@ Clone/Create Project Directory:
 mkdir cti-taxii-hub
 cd cti-taxii-hub
 
-Create Files: Place the docker-compose.yml, Dockerfile, requirements.txt, config.py, vt_fetcher.py, otx_fetcher.py, taxii_publisher.py, and main.py files into this directory.
+Create Files: Place all the Python scripts (config.py, vt_fetcher.py, otx_fetcher.py, abuseipdb_fetcher.py, taxii_publisher.py, main.py), requirements.txt, Dockerfile, and docker-compose.yml into this directory.
 
 Configure API Keys and Passwords:
 
@@ -78,6 +81,8 @@ YOUR_VIRUSTOTAL_API_KEY
 
 YOUR_ALIENVAULT_OTX_API_KEY
 
+YOUR_ABUSEIPDB_API_KEY
+
 Ensure OPENTAXII_PASSWORD matches the one set in docker-compose.yml.
 
 2. Deploy to AWS EC2
@@ -92,7 +97,7 @@ Connect to your EC2 instance via SSH.
 
 Install Docker and Docker Compose on the EC2 instance.
 
-Copy your project files to the EC2 instance (e.g., using scp or by creating them directly).
+Copy your project files to the EC2 instance (e.g., using scp from your Mac Terminal, or by creating them directly using nano/vi).
 
 Navigate to your project directory on the EC2 instance and run:
 
@@ -110,11 +115,11 @@ Monitor Collector Logs:
 
 docker-compose logs -f cti_collector
 
-You will see logs indicating the fetching process from VirusTotal and AlienVault OTX, and the publishing attempts to OpenTAXII.
+You will see logs indicating the fetching process from VirusTotal, AlienVault OTX, and AbuseIPDB, and the publishing attempts to OpenTAXII.
 
 Access OpenTAXII Discovery Service:
 
-Open your web browser and navigate to http://<YOUR_EC2_PUBLIC_IP>:9000/services/discovery.
+Open your web browser on your Mac and navigate to http://<YOUR_EC2_PUBLIC_IP>:9000/services/discovery.
 
 You should see an XML response confirming the OpenTAXII server is running.
 
@@ -131,23 +136,23 @@ CTI Collector (cti_collector service):
 
 This is a Python application running in its own Docker container.
 
-It uses vt_fetcher.py and otx_fetcher.py to make API calls to VirusTotal and AlienVault OTX, respectively.
+It uses vt_fetcher.py, otx_fetcher.py, and abuseipdb_fetcher.py to make API calls to their respective services.
 
-The fetched raw intelligence is parsed and converted into STIX 2.x Indicator and Observable objects using the stix2 Python library.
+The fetched raw intelligence is parsed and converted into STIX 2.x Indicator and Observable objects using the stix2 Python library. For AbuseIPDB, custom STIX properties (x_abuseipdb_...) are used to store additional details like the confidence score.
 
 The taxii_publisher.py then takes these STIX objects, bundles them, and sends them to the OpenTAXII server's Inbox service using HTTP POST requests with a TAXII 1.x XML wrapper.
 
 The main.py script orchestrates this process, running it periodically (e.g., every hour).
 
 Data Flow:
-VirusTotal / OTX APIs -> Python Fetchers -> STIX 2.x Conversion -> TAXII Publisher -> OpenTAXII Inbox -> OpenTAXII Database
+VirusTotal / OTX / AbuseIPDB APIs -> Python Fetchers -> STIX 2.x Conversion -> TAXII Publisher -> OpenTAXII Inbox -> OpenTAXII Database
 
 Troubleshooting
 Containers not starting: Check docker-compose logs <service_name> for errors.
 
 API Key Issues: Double-check your API keys in config.py and ensure they are correctly set as environment variables in docker-compose.yml.
 
-Rate Limits: Free tier APIs (like VirusTotal, OTX) have rate limits. The Python scripts include basic time.sleep() for 429 errors, but you might hit limits if you try to fetch too much too quickly.
+Rate Limits: Free tier APIs (like VirusTotal, OTX, AbuseIPDB) have rate limits. The Python scripts include basic time.sleep() for 429 errors, but you might hit limits if you try to fetch too much too quickly.
 
 Security Group: Ensure port 9000 (and 22 for SSH) is open in your AWS EC2 Security Group.
 
